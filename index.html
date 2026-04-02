@@ -182,13 +182,62 @@ function findBest(gg,curLines){
       for(const a of pg[gi].attrs){if(!used.has(a)){used.add(a);if(_tryAssign(gi+1,used))return true;used.delete(a);}}return false;};
     possible=_tryAssign(0,new Set());
     if(!possible)return{status:'impossible',totalRocks:Infinity,totalDays:Infinity,p1Rocks:Infinity,p2Rocks:Infinity,confidence:{p50:0,p75:0,p90:0,meanP1:0,meanP2:0},strategies:[],comparison:[],phases:[],guide:['Goals are impossible: no valid combination of distinct attributes can satisfy all goals.'],match:{mL:new Set(),mG:new Set(),as:new Map(),cnt:0},bestStrategy:null};}
-  const cur=curLines.map(x=>x&&x.attr&&x.attr!=='none'?x:{attr:null,tier:0});const fm=fullMatch(pg,curLines);if(fm.cnt===3)return{status:'complete',totalRocks:0,totalDays:0,p1Rocks:0,p2Rocks:0,confidence:{p50:0,p75:0,p90:0,meanP1:0,meanP2:0},strategies:[],match:fm};const am=optMatch(pg,curLines);const strats=[];const s1=mc(()=>simGreedyAttr(pg,{},[0,1,2]),8000);strats.push({name:'Full Reset',type:'reset',mean:s1.mean,meanP1:s1.meanP1,meanP2:s1.meanP2,initLocked:{},remGoals:[0,1,2]});if(am.cnt>0){const lk2={};for(const[li] of am.as)lk2[li]=cur[li];const rem2=[0,1,2].filter(g=>!am.mG.has(g));const s2=mc(()=>simGreedyAttr(pg,lk2,rem2),8000);strats.push({name:'Lock all matched',type:'standard',mean:s2.mean,meanP1:s2.meanP1,meanP2:s2.meanP2,initLocked:lk2,remGoals:rem2});if(fm.cnt>0&&fm.cnt<am.cnt){const lk3={};for(const[li] of fm.as)lk3[li]=cur[li];const rem3=[0,1,2].filter(g=>!fm.mG.has(g));const s3=mc(()=>simGreedyAttr(pg,lk3,rem3),8000);strats.push({name:'Lock attr+tier only',type:'selective',mean:s3.mean,meanP1:s3.meanP1,meanP2:s3.meanP2,initLocked:lk3,remGoals:rem3});}if(am.cnt>=2){const me=[...am.as.entries()];for(let i=0;i<me.length;i++){const[li,gi]=me[i];const lk={};lk[li]=cur[li];const rem=[0,1,2].filter(g=>g!==gi);const s=mc(()=>simGreedyAttr(pg,lk,rem),6000);strats.push({name:'Lock L'+(+li+1)+' only',type:'deviate',mean:s.mean,meanP1:s.meanP1,meanP2:s.meanP2,initLocked:lk,remGoals:rem});}}}strats.sort((a,b)=>a.mean-b.mean);const best=strats[0];const conf=mc(()=>best.type==='reset'?simGreedyAttr(pg,{},[0,1,2]):simGreedyAttr(pg,best.initLocked,best.remGoals),20000);const lns=['Line 1','Line 2','Line 3'];const guide=[];const phases=[];for(const li in best.initLocked){if(best.initLocked[li]&&best.initLocked[li].attr){const a=best.initLocked[li];phases.push({done:true,desc:lns[li]+': '+an(a.attr)+' T'+a.tier+' → locked'});}}const lkd={...best.initLocked};const rg=new Set(best.remGoals);for(const tl of[2,1,0]){if(lkd[tl])continue;if(rg.size===0)break;const cost=RC[Object.keys(lkd).length];const targets=[];for(const gi of rg)targets.push(gg[gi].attrs.map(an).join('/')+' ≥T'+gg[gi].minTier);guide.push('Roll '+lns[tl]+' ('+cost+' rock'+(cost>1?'s':'')+'/roll) for: '+targets.join(' or ')+' → lock');phases.push({done:false,desc:'Roll '+lns[tl]+' ('+cost+' rocks/roll)'});lkd[tl]={attr:'_',tier:0};rg.delete([...rg][0]);}if(conf.meanP2>0)guide.push('Phase 2: Sub-stat reroll (% Reset) lines below tier target (~'+Math.round(conf.meanP2)+' rocks)');const comp=strats.slice(0,5).map(s=>({name:s.name,mean:Math.round(s.mean),meanP1:Math.round(s.meanP1),meanP2:Math.round(s.meanP2),isBest:s===best}));return{status:best.type==='reset'&&am.cnt>0?'reset':best.type==='deviate'?'deviate':'standard',totalRocks:conf.mean,totalDays:conf.mean/RPD,p1Rocks:conf.meanP1,p2Rocks:conf.meanP2,confidence:conf,strategies:strats,comparison:comp,phases,guide,match:am,bestStrategy:best};}
+  const cur=curLines.map(x=>x&&x.attr&&x.attr!=='none'?x:{attr:null,tier:0});const fm=fullMatch(pg,curLines);if(fm.cnt===3)return{status:'complete',totalRocks:0,totalDays:0,p1Rocks:0,p2Rocks:0,confidence:{p50:0,p75:0,p90:0,meanP1:0,meanP2:0},strategies:[],match:fm};const am=optMatch(pg,curLines);const strats=[];const s1=mc(()=>simGreedyAttr(pg,{},[0,1,2]),8000);strats.push({name:'Full Reset',type:'reset',mean:s1.mean,meanP1:s1.meanP1,meanP2:s1.meanP2,initLocked:{},remGoals:[0,1,2]});if(am.cnt>0){const lk2={};for(const[li] of am.as)lk2[li]=cur[li];const rem2=[0,1,2].filter(g=>!am.mG.has(g));const s2=mc(()=>simGreedyAttr(pg,lk2,rem2),8000);strats.push({name:'Lock all matched',type:'standard',mean:s2.mean,meanP1:s2.meanP1,meanP2:s2.meanP2,initLocked:lk2,remGoals:rem2});if(fm.cnt>0&&fm.cnt<am.cnt){const lk3={};for(const[li] of fm.as)lk3[li]=cur[li];const rem3=[0,1,2].filter(g=>!fm.mG.has(g));const s3=mc(()=>simGreedyAttr(pg,lk3,rem3),8000);strats.push({name:'Lock attr+tier only',type:'selective',mean:s3.mean,meanP1:s3.meanP1,meanP2:s3.meanP2,initLocked:lk3,remGoals:rem3});}if(am.cnt>=2){const me=[...am.as.entries()];for(let i=0;i<me.length;i++){const[li,gi]=me[i];const lk={};lk[li]=cur[li];const rem=[0,1,2].filter(g=>g!==gi);const s=mc(()=>simGreedyAttr(pg,lk,rem),6000);strats.push({name:'Lock L'+(+li+1)+' only',type:'deviate',mean:s.mean,meanP1:s.meanP1,meanP2:s.meanP2,initLocked:lk,remGoals:rem});}}}strats.sort((a,b)=>a.mean-b.mean);
+  // BUGFIX: Stability margin — prevent strategy flipping when candidates are within MC noise.
+  // Strategy preference: standard > selective > deviate > reset (most conservative first)
+  const STAB_PREF={standard:0,selective:1,deviate:2,reset:3};
+  let best=strats[0];
+  if(strats.length>=2){
+    const gap=strats[1].mean-strats[0].mean;
+    const margin=Math.max(5,strats[0].mean*0.08); // 5 rocks or 8%, whichever is larger
+    if(gap<margin){
+      // Top strategies are within noise band — run tiebreaker with more sims
+      const top2=strats.slice(0,2);
+      for(const s of top2){
+        const extra=mc(()=>simGreedyAttr(pg,s.initLocked,s.remGoals),12000);
+        s.mean=(s.mean*8000+extra.mean*12000)/20000; // weighted average of all sims
+        s.meanP1=(s.meanP1*8000+extra.meanP1*12000)/20000;
+        s.meanP2=(s.meanP2*8000+extra.meanP2*12000)/20000;
+      }
+      top2.sort((a,b)=>a.mean-b.mean);
+      const refinedGap=top2[1].mean-top2[0].mean;
+      const refinedMargin=Math.max(3,top2[0].mean*0.05);
+      if(refinedGap<refinedMargin){
+        // Still too close — prefer conservative strategy
+        top2.sort((a,b)=>(STAB_PREF[a.type]||9)-(STAB_PREF[b.type]||9));
+      }
+      // Re-sort full list with updated means
+      strats.sort((a,b)=>a.mean-b.mean);
+      best=top2[0]; // winner from tiebreaker
+    }
+  }
+  const conf=mc(()=>best.type==='reset'?simGreedyAttr(pg,{},[0,1,2]):simGreedyAttr(pg,best.initLocked,best.remGoals),20000);const lns=['Line 1','Line 2','Line 3'];const guide=[];const phases=[];for(const li in best.initLocked){if(best.initLocked[li]&&best.initLocked[li].attr){const a=best.initLocked[li];phases.push({done:true,desc:lns[li]+': '+an(a.attr)+' T'+a.tier+' → locked'});}}const lkd={...best.initLocked};const rg=new Set(best.remGoals);for(const tl of[2,1,0]){if(lkd[tl])continue;if(rg.size===0)break;const cost=RC[Object.keys(lkd).length];const targets=[];for(const gi of rg)targets.push(gg[gi].attrs.map(an).join('/')+' ≥T'+gg[gi].minTier);guide.push('Roll '+lns[tl]+' ('+cost+' rock'+(cost>1?'s':'')+'/roll) for: '+targets.join(' or ')+' → lock');phases.push({done:false,desc:'Roll '+lns[tl]+' ('+cost+' rocks/roll)'});lkd[tl]={attr:'_',tier:0};rg.delete([...rg][0]);}if(conf.meanP2>0)guide.push('Phase 2: Sub-stat reroll (% Reset) lines below tier target (~'+Math.round(conf.meanP2)+' rocks)');const comp=strats.slice(0,5).map(s=>({name:s.name,mean:Math.round(s.mean),meanP1:Math.round(s.meanP1),meanP2:Math.round(s.meanP2),isBest:s===best}));return{status:best.type==='reset'&&am.cnt>0?'reset':best.type==='deviate'?'deviate':'standard',totalRocks:conf.mean,totalDays:conf.mean/RPD,p1Rocks:conf.meanP1,p2Rocks:conf.meanP2,confidence:conf,strategies:strats,comparison:comp,phases,guide,match:am,bestStrategy:best};}
 
 return{ATTRS,LA,RC,RPD,an,optMatch,fullMatch,findBest,simRoll};
 })();
 
 // Caches
-const CC=new Map(),QC=new Map();function ck(g,c){return JSON.stringify([g,c]);}
+const CC=new Map(),QC=new Map();
+
+// BUGFIX: Normalize cache keys so functionally-equivalent states share the same key.
+// Tiers below goal threshold are normalized to band representatives (T1/T5/T11)
+// since they produce identical MC behavior — all that matters is whether tier >= goal.
+function ck(goals,cur){
+  // Build a normalized representation
+  const ng=goals.map(g=>({a:(g.attrs||[]).slice().sort(),mt:g.minTier||1}));
+  const nc=cur.map((c,li)=>{
+    if(!c||!c.attr||c.attr==='none')return{a:'none',t:0};
+    // Find what goal this line COULD satisfy, get its minTier
+    let goalMinT=1;for(const g of ng){if(g.a.includes(c.attr)&&g.mt>goalMinT)goalMinT=g.mt;}
+    // If tier >= goalMinT, normalize to goalMinT (exact value above threshold doesn't matter for strategy)
+    // If tier < goalMinT, normalize to tier band: T1-4→1, T5-10→5, T11-15→11
+    let nt;
+    if(c.tier>=goalMinT)nt=goalMinT;
+    else if(c.tier<=4)nt=1;else if(c.tier<=10)nt=5;else nt=11;
+    return{a:c.attr,t:nt};
+  });
+  return JSON.stringify([ng,nc]);
+}
 function getCR(g,c){const k=ck(g,c);if(CC.has(k))return CC.get(k);const r=E.findBest(g,c);CC.set(k,r);if(CC.size>150)CC.delete(CC.keys().next().value);return r;}
 function getQC(goals,cur){if(!goals||goals.length!==3)return 0;const _pg=goals.map(g=>(!g||!g.attrs||!g.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:g);const k=ck(goals,cur);if(CC.has(k))return CC.get(k)?.totalRocks||0;if(QC.has(k))return QC.get(k);const m=E.fullMatch(_pg,cur);if(m.cnt===3){QC.set(k,0);return 0;}const am=E.optMatch(_pg,cur);const lk={};for(const[li] of am.as){const cl=cur[li];if(cl&&cl.attr&&cl.attr!=='none')lk[li]=cl;}const rem=[0,1,2].filter(g=>!am.mG.has(g));let sum=0;const N=500;for(let i=0;i<N;i++){const l2={};for(const k2 in lk)l2[k2]=lk[k2];let rocks=0;const locked={...l2};const rg=new Set(rem);for(const tl of[2,1,0]){if(locked[tl])continue;if(rg.size===0)break;const cost=E.RC[Object.keys(locked).length];let att=0;while(rg.size>0){rocks+=cost;att++;if(Math.random()>E.LA[tl]){if(att>2000)break;continue;}const used=new Set();for(const k3 in locked)if(locked[k3])used.add(locked[k3].attr);const pool=E.ATTRS.filter(a=>!used.has(a.id));if(!pool.length)continue;const tot=pool.reduce((s,a)=>s+a.p,0);let rv=Math.random()*tot;let pk=pool[pool.length-1].id;for(const a of pool){rv-=a.p;if(rv<=0){pk=a.id;break;}}let matched=null;for(const gi of rg){if(_pg[gi].attrs.includes(pk)){matched=gi;break;}}if(matched!==null){locked[tl]={attr:pk,tier:rollTier()};rg.delete(matched);break;}if(att>2000)break;}}const goalMap={};const usedG=new Set();for(const tl of[2,1,0]){if(!locked[tl])continue;for(let g=0;g<3;g++){if(usedG.has(g))continue;if(_pg[g].attrs.includes(locked[tl].attr)){goalMap[tl]=g;usedG.add(g);break;}}}const tierFix=[];for(const li in goalMap){const g2=goalMap[li];if(locked[li].tier<_pg[g2].minTier)tierFix.push({minT:_pg[g2].minTier});}let tfRem=tierFix.length;while(tfRem>0){rocks+=E.RC[Math.min(3-tfRem,2)];for(let j=0;j<tfRem;j++){if(rollTier()>=tierFix[j].minT){tierFix.splice(j,1);tfRem--;break;}}if(rocks>5000)break;}sum+=rocks;}QC.set(k,sum/N);return sum/N;}
 
@@ -528,11 +577,11 @@ function renCh(){const n=$('RI').value.trim();if(!n)return;const c=gCh();if(c){c
 function resetChar(){const c=gCh();if(!c||!confirm('Reset '+c.name+'?'))return;for(const g of c.gear){g.goals=[{attrs:[],minTier:1},{attrs:[],minTier:1},{attrs:[],minTier:1}];g.current=[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}];g.ignored=false;}save();render();}
 function togIgn(){const c=gCh();if(!c)return;c.gear[selG].ignored=!c.gear[selG].ignored;save();render();}
 function togDd(gi){if(oDd&&oDd.gi===gi)oDd=null;else oDd={gi};rGE(gCh());}
-function addGA(gi,id){const c=gCh();if(!c)return;const g=c.gear[selG].goals[gi];if(g.attrs.length>=3||g.attrs.includes(id))return;g.attrs.push(id);oDd=null;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
-function rmGA(gi,ci){const c=gCh();if(!c)return;c.gear[selG].goals[gi].attrs.splice(ci,1);save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
-function setGoalTier(gi,t){const c=gCh();if(!c)return;c.gear[selG].goals[gi].minTier=t;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
-function setCurA(li,v){const c=gCh();if(!c)return;c.gear[selG].current[li].attr=v;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
-function setCurT(li,t){const c=gCh();if(!c)return;c.gear[selG].current[li].tier=t;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
+function addGA(gi,id){const c=gCh();if(!c)return;const g=c.gear[selG].goals[gi];if(g.attrs.length>=3||g.attrs.includes(id))return;const oldK=ck(c.gear[selG].goals,c.gear[selG].current);g.attrs.push(id);oDd=null;const newK=ck(c.gear[selG].goals,c.gear[selG].current);if(oldK===newK){sv(D);}else{save(newK);}render();}
+function rmGA(gi,ci){const c=gCh();if(!c)return;const oldK=ck(c.gear[selG].goals,c.gear[selG].current);c.gear[selG].goals[gi].attrs.splice(ci,1);const newK=ck(c.gear[selG].goals,c.gear[selG].current);if(oldK===newK){sv(D);}else{save(newK);}render();}
+function setGoalTier(gi,t){const c=gCh();if(!c)return;const oldK=ck(c.gear[selG].goals,c.gear[selG].current);c.gear[selG].goals[gi].minTier=t;const newK=ck(c.gear[selG].goals,c.gear[selG].current);if(oldK===newK){sv(D);}else{save(newK);}render();}
+function setCurA(li,v){const c=gCh();if(!c)return;const oldK=ck(c.gear[selG].goals,c.gear[selG].current);c.gear[selG].current[li].attr=v;const newK=ck(c.gear[selG].goals,c.gear[selG].current);if(oldK===newK){sv(D);}else{save(newK);}render();}
+function setCurT(li,t){const c=gCh();if(!c)return;const oldK=ck(c.gear[selG].goals,c.gear[selG].current);c.gear[selG].current[li].tier=t;const newK=ck(c.gear[selG].goals,c.gear[selG].current);if(oldK===newK){sv(D);}else{save(newK);}render();}
 
 function exportData(){const b=new Blob([JSON.stringify(D,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='nikke-ol-data.json';a.click();URL.revokeObjectURL(u);}
 function importData(){const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.characters&&Array.isArray(d.characters)){mg(d);D=d;selCh=d.selectedCharId||(d.characters[0]?.id||null);selG=d.selectedGearIdx||0;save();render();}else{alert('Invalid file: missing characters array');}}catch(e){alert('Import failed: '+e.message);}};r.readAsText(f);};i.click();}
