@@ -157,7 +157,7 @@ function optMatch(gg,cur){const c=cur.map(x=>x&&x.attr&&x.attr!=='none'?x.attr:n
 
 function fullMatch(gg,cur){const c=cur.map(x=>x&&x.attr&&x.attr!=='none'?x:{attr:null,tier:0});const cp=[];for(let l=0;l<3;l++){if(!c[l].attr)continue;for(let g=0;g<gg.length;g++){if(gg[g].attrs.includes(c[l].attr)&&c[l].tier>=gg[g].minTier)cp.push([l,g]);}}let best=0,ba=new Map();const n=cp.length;for(let m=0;m<(1<<n);m++){const uL=new Set(),uG=new Set(),a=new Map();let ok=1,cnt=0;for(let b=0;b<n;b++){if(!(m&(1<<b)))continue;const[l,g]=cp[b];if(uL.has(l)||uG.has(g)){ok=0;break;}uL.add(l);uG.add(g);a.set(l,g);cnt++;}if(ok&&cnt>best){best=cnt;ba=a;}}return{mG:new Set([...ba.values()]),mL:new Set([...ba.keys()]),as:ba,cnt:best};}
 
-function simRoll(locked){const r={},used=new Set();for(const k in locked)if(locked[k])used.add(locked[k].attr);for(let i=0;i<3;i++){if(locked[i]){r[i]=locked[i];continue;}if(Math.random()>LA[i]){r[i]=null;continue;}const pool=ATTRS.filter(a=>!used.has(a.id));if(!pool.length){r[i]=null;continue;}const tot=pool.reduce((s,a)=>s+a.p,0);let rv=Math.random()*tot;let pk=pool[pool.length-1].id;for(const a of pool){rv-=a.p;if(rv<=0){pk=a.id;break;}}used.add(pk);r[i]={attr:pk,tier:rollTier()};}return r;}
+function simRoll(locked){const r={},used=new Set();for(const k in locked)if(locked[k]&&locked[k].attr)used.add(locked[k].attr);for(let i=0;i<3;i++){if(locked[i]){r[i]=locked[i];continue;}if(Math.random()>LA[i]){r[i]=null;continue;}const pool=ATTRS.filter(a=>!used.has(a.id));if(!pool.length){r[i]=null;continue;}const tot=pool.reduce((s,a)=>s+a.p,0);let rv=Math.random()*tot;let pk=pool[pool.length-1].id;for(const a of pool){rv-=a.p;if(rv<=0){pk=a.id;break;}}used.add(pk);r[i]={attr:pk,tier:rollTier()};}return r;}
 
 function simGreedyAttr(gg,initLocked,remGoals){const locked={...initLocked};const rem=new Set(remGoals);let p1=0;for(const tl of[2,1,0]){if(locked[tl])continue;if(rem.size===0)break;const cost=RC[Object.keys(locked).length];let att=0;while(rem.size>0){p1+=cost;att++;const roll=simRoll(locked);const hit=roll[tl];if(!hit)continue;let matched=null;for(const gi of rem){if(gg[gi].attrs.includes(hit.attr)){matched=gi;break;}}if(matched!==null){locked[tl]=hit;rem.delete(matched);break;}if(att>3000)break;}}const goalMap={};const usedG=new Set();for(const tl of[2,1,0]){if(!locked[tl])continue;for(let g=0;g<3;g++){if(usedG.has(g))continue;if(gg[g].attrs.includes(locked[tl].attr)){goalMap[tl]=g;usedG.add(g);break;}}}const tierFix=[];for(const li in goalMap){const g=goalMap[li];if(locked[li].tier<gg[g].minTier)tierFix.push({li:+li,minT:gg[g].minTier});}let p2=0;if(tierFix.length>0){let remaining=[...tierFix];while(remaining.length>0){const nLocked=3-remaining.length;const cost=RC[Math.min(nLocked,2)];p2+=cost;const hit=[];for(let j=0;j<remaining.length;j++){if(rollTier()>=remaining[j].minT)hit.push(j);}if(hit.length>0){hit.sort((a,b)=>tierPGte(remaining[a].minT)-tierPGte(remaining[b].minT));remaining.splice(hit[0],1);}if(p2>8000)break;}}return{p1,p2,total:p1+p2};}
 
@@ -172,7 +172,17 @@ function padGoals(gg){
 function findBest(gg,curLines){
   const activeCount=gg.filter(g=>g.attrs&&g.attrs.length>0).length;
   if(activeCount===0)return null;
-  const pg=padGoals(gg);const cur=curLines.map(x=>x&&x.attr&&x.attr!=='none'?x:{attr:null,tier:0});const fm=fullMatch(pg,curLines);if(fm.cnt===3)return{status:'complete',totalRocks:0,totalDays:0,p1Rocks:0,p2Rocks:0,confidence:{p50:0,p75:0,p90:0,meanP1:0,meanP2:0},strategies:[],match:fm};const am=optMatch(pg,curLines);const strats=[];const s1=mc(()=>simGreedyAttr(pg,{},[0,1,2]),8000);strats.push({name:'Full Reset',type:'reset',mean:s1.mean,meanP1:s1.meanP1,meanP2:s1.meanP2,initLocked:{},remGoals:[0,1,2]});if(am.cnt>0){const lk2={};for(const[li] of am.as)lk2[li]=cur[li];const rem2=[0,1,2].filter(g=>!am.mG.has(g));const s2=mc(()=>simGreedyAttr(pg,lk2,rem2),8000);strats.push({name:'Lock all matched',type:'standard',mean:s2.mean,meanP1:s2.meanP1,meanP2:s2.meanP2,initLocked:lk2,remGoals:rem2});if(fm.cnt>0&&fm.cnt<am.cnt){const lk3={};for(const[li] of fm.as)lk3[li]=cur[li];const rem3=[0,1,2].filter(g=>!fm.mG.has(g));const s3=mc(()=>simGreedyAttr(pg,lk3,rem3),8000);strats.push({name:'Lock attr+tier only',type:'selective',mean:s3.mean,meanP1:s3.meanP1,meanP2:s3.meanP2,initLocked:lk3,remGoals:rem3});}if(am.cnt>=2){const me=[...am.as.entries()];for(let i=0;i<me.length;i++){const[li,gi]=me[i];const lk={};lk[li]=cur[li];const rem=[0,1,2].filter(g=>g!==gi);const s=mc(()=>simGreedyAttr(pg,lk,rem),6000);strats.push({name:'Lock L'+(+li+1)+' only',type:'deviate',mean:s.mean,meanP1:s.meanP1,meanP2:s.meanP2,initLocked:lk,remGoals:rem});}}}strats.sort((a,b)=>a.mean-b.mean);const best=strats[0];const conf=mc(()=>best.type==='reset'?simGreedyAttr(pg,{},[0,1,2]):simGreedyAttr(pg,best.initLocked,best.remGoals),20000);const lns=['Line 1','Line 2','Line 3'];const guide=[];const phases=[];for(const li in best.initLocked){if(best.initLocked[li]&&best.initLocked[li].attr){const a=best.initLocked[li];phases.push({done:true,desc:lns[li]+': '+an(a.attr)+' T'+a.tier+' → locked'});}}const lkd={...best.initLocked};const rg=new Set(best.remGoals);for(const tl of[2,1,0]){if(lkd[tl])continue;if(rg.size===0)break;const cost=RC[Object.keys(lkd).length];const targets=[];for(const gi of rg)targets.push(gg[gi].attrs.map(an).join('/')+' ≥T'+gg[gi].minTier);guide.push('Roll '+lns[tl]+' ('+cost+' rock'+(cost>1?'s':'')+'/roll) for: '+targets.join(' or ')+' → lock');phases.push({done:false,desc:'Roll '+lns[tl]+' ('+cost+' rocks/roll)'});lkd[tl]={attr:'_',tier:0};rg.delete([...rg][0]);}if(conf.meanP2>0)guide.push('Phase 2: Sub-stat reroll (% Reset) lines below tier target (~'+Math.round(conf.meanP2)+' rocks)');const comp=strats.slice(0,5).map(s=>({name:s.name,mean:Math.round(s.mean),meanP1:Math.round(s.meanP1),meanP2:Math.round(s.meanP2),isBest:s===best}));return{status:best.type==='reset'&&am.cnt>0?'reset':best.type==='deviate'?'deviate':'standard',totalRocks:conf.mean,totalDays:conf.mean/RPD,p1Rocks:conf.meanP1,p2Rocks:conf.meanP2,confidence:conf,strategies:strats,comparison:comp,phases,guide,match:am,bestStrategy:best};}
+  const pg=padGoals(gg);
+  // Check if goals are satisfiable (can we assign 3 distinct attrs, one per goal?)
+  const _activeGs=pg.filter(g=>g.attrs.length<9); // non-wildcard goals
+  if(_activeGs.length>=2){let possible=false;
+    // Brute force: try all attr combos for active goals
+    const _tryAssign=(gi,used)=>{if(gi>=pg.length)return true;
+      if(pg[gi].attrs.length===9)return _tryAssign(gi+1,used); // wildcard always satisfiable
+      for(const a of pg[gi].attrs){if(!used.has(a)){used.add(a);if(_tryAssign(gi+1,used))return true;used.delete(a);}}return false;};
+    possible=_tryAssign(0,new Set());
+    if(!possible)return{status:'impossible',totalRocks:Infinity,totalDays:Infinity,p1Rocks:Infinity,p2Rocks:Infinity,confidence:{p50:0,p75:0,p90:0,meanP1:0,meanP2:0},strategies:[],comparison:[],phases:[],guide:['Goals are impossible: no valid combination of distinct attributes can satisfy all goals.'],match:{mL:new Set(),mG:new Set(),as:new Map(),cnt:0},bestStrategy:null};}
+  const cur=curLines.map(x=>x&&x.attr&&x.attr!=='none'?x:{attr:null,tier:0});const fm=fullMatch(pg,curLines);if(fm.cnt===3)return{status:'complete',totalRocks:0,totalDays:0,p1Rocks:0,p2Rocks:0,confidence:{p50:0,p75:0,p90:0,meanP1:0,meanP2:0},strategies:[],match:fm};const am=optMatch(pg,curLines);const strats=[];const s1=mc(()=>simGreedyAttr(pg,{},[0,1,2]),8000);strats.push({name:'Full Reset',type:'reset',mean:s1.mean,meanP1:s1.meanP1,meanP2:s1.meanP2,initLocked:{},remGoals:[0,1,2]});if(am.cnt>0){const lk2={};for(const[li] of am.as)lk2[li]=cur[li];const rem2=[0,1,2].filter(g=>!am.mG.has(g));const s2=mc(()=>simGreedyAttr(pg,lk2,rem2),8000);strats.push({name:'Lock all matched',type:'standard',mean:s2.mean,meanP1:s2.meanP1,meanP2:s2.meanP2,initLocked:lk2,remGoals:rem2});if(fm.cnt>0&&fm.cnt<am.cnt){const lk3={};for(const[li] of fm.as)lk3[li]=cur[li];const rem3=[0,1,2].filter(g=>!fm.mG.has(g));const s3=mc(()=>simGreedyAttr(pg,lk3,rem3),8000);strats.push({name:'Lock attr+tier only',type:'selective',mean:s3.mean,meanP1:s3.meanP1,meanP2:s3.meanP2,initLocked:lk3,remGoals:rem3});}if(am.cnt>=2){const me=[...am.as.entries()];for(let i=0;i<me.length;i++){const[li,gi]=me[i];const lk={};lk[li]=cur[li];const rem=[0,1,2].filter(g=>g!==gi);const s=mc(()=>simGreedyAttr(pg,lk,rem),6000);strats.push({name:'Lock L'+(+li+1)+' only',type:'deviate',mean:s.mean,meanP1:s.meanP1,meanP2:s.meanP2,initLocked:lk,remGoals:rem});}}}strats.sort((a,b)=>a.mean-b.mean);const best=strats[0];const conf=mc(()=>best.type==='reset'?simGreedyAttr(pg,{},[0,1,2]):simGreedyAttr(pg,best.initLocked,best.remGoals),20000);const lns=['Line 1','Line 2','Line 3'];const guide=[];const phases=[];for(const li in best.initLocked){if(best.initLocked[li]&&best.initLocked[li].attr){const a=best.initLocked[li];phases.push({done:true,desc:lns[li]+': '+an(a.attr)+' T'+a.tier+' → locked'});}}const lkd={...best.initLocked};const rg=new Set(best.remGoals);for(const tl of[2,1,0]){if(lkd[tl])continue;if(rg.size===0)break;const cost=RC[Object.keys(lkd).length];const targets=[];for(const gi of rg)targets.push(gg[gi].attrs.map(an).join('/')+' ≥T'+gg[gi].minTier);guide.push('Roll '+lns[tl]+' ('+cost+' rock'+(cost>1?'s':'')+'/roll) for: '+targets.join(' or ')+' → lock');phases.push({done:false,desc:'Roll '+lns[tl]+' ('+cost+' rocks/roll)'});lkd[tl]={attr:'_',tier:0};rg.delete([...rg][0]);}if(conf.meanP2>0)guide.push('Phase 2: Sub-stat reroll (% Reset) lines below tier target (~'+Math.round(conf.meanP2)+' rocks)');const comp=strats.slice(0,5).map(s=>({name:s.name,mean:Math.round(s.mean),meanP1:Math.round(s.meanP1),meanP2:Math.round(s.meanP2),isBest:s===best}));return{status:best.type==='reset'&&am.cnt>0?'reset':best.type==='deviate'?'deviate':'standard',totalRocks:conf.mean,totalDays:conf.mean/RPD,p1Rocks:conf.meanP1,p2Rocks:conf.meanP2,confidence:conf,strategies:strats,comparison:comp,phases,guide,match:am,bestStrategy:best};}
 
 return{ATTRS,LA,RC,RPD,an,optMatch,fullMatch,findBest,simRoll};
 })();
@@ -180,15 +190,15 @@ return{ATTRS,LA,RC,RPD,an,optMatch,fullMatch,findBest,simRoll};
 // Caches
 const CC=new Map(),QC=new Map();function ck(g,c){return JSON.stringify([g,c]);}
 function getCR(g,c){const k=ck(g,c);if(CC.has(k))return CC.get(k);const r=E.findBest(g,c);CC.set(k,r);if(CC.size>150)CC.delete(CC.keys().next().value);return r;}
-function getQC(goals,cur){if(!goals||goals.length!==3)return 0;const _pg=goals.map(g=>(!g||!g.attrs||!g.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:g);const k=ck(goals,cur);if(CC.has(k))return CC.get(k)?.totalRocks||0;if(QC.has(k))return QC.get(k);const m=E.fullMatch(_pg,cur);if(m.cnt===3){QC.set(k,0);return 0;}const am=E.optMatch(_pg,cur);const lk={};for(const[li] of am.as){const cl=cur[li];if(cl&&cl.attr&&cl.attr!=='none')lk[li]=cl;}const rem=[0,1,2].filter(g=>!am.mG.has(g));let sum=0;const N=1500;for(let i=0;i<N;i++){const l2={};for(const k2 in lk)l2[k2]=lk[k2];let rocks=0;const locked={...l2};const rg=new Set(rem);for(const tl of[2,1,0]){if(locked[tl])continue;if(rg.size===0)break;const cost=E.RC[Object.keys(locked).length];let att=0;while(rg.size>0){rocks+=cost;att++;if(Math.random()>E.LA[tl]){if(att>2000)break;continue;}const used=new Set();for(const k3 in locked)if(locked[k3])used.add(locked[k3].attr);const pool=E.ATTRS.filter(a=>!used.has(a.id));if(!pool.length)continue;const tot=pool.reduce((s,a)=>s+a.p,0);let rv=Math.random()*tot;let pk=pool[pool.length-1].id;for(const a of pool){rv-=a.p;if(rv<=0){pk=a.id;break;}}let matched=null;for(const gi of rg){if(_pg[gi].attrs.includes(pk)){matched=gi;break;}}if(matched!==null){locked[tl]={attr:pk,tier:rollTier()};rg.delete(matched);break;}if(att>2000)break;}}const goalMap={};const usedG=new Set();for(const tl of[2,1,0]){if(!locked[tl])continue;for(let g=0;g<3;g++){if(usedG.has(g))continue;if(_pg[g].attrs.includes(locked[tl].attr)){goalMap[tl]=g;usedG.add(g);break;}}}for(const li in goalMap){const g=goalMap[li];if(locked[li].tier<_pg[g].minTier){let done=false;while(!done&&rocks<5000){rocks+=1;if(rollTier()>=_pg[g].minTier)done=true;}}}sum+=rocks;}QC.set(k,sum/N);return sum/N;}
+function getQC(goals,cur){if(!goals||goals.length!==3)return 0;const _pg=goals.map(g=>(!g||!g.attrs||!g.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:g);const k=ck(goals,cur);if(CC.has(k))return CC.get(k)?.totalRocks||0;if(QC.has(k))return QC.get(k);const m=E.fullMatch(_pg,cur);if(m.cnt===3){QC.set(k,0);return 0;}const am=E.optMatch(_pg,cur);const lk={};for(const[li] of am.as){const cl=cur[li];if(cl&&cl.attr&&cl.attr!=='none')lk[li]=cl;}const rem=[0,1,2].filter(g=>!am.mG.has(g));let sum=0;const N=1500;for(let i=0;i<N;i++){const l2={};for(const k2 in lk)l2[k2]=lk[k2];let rocks=0;const locked={...l2};const rg=new Set(rem);for(const tl of[2,1,0]){if(locked[tl])continue;if(rg.size===0)break;const cost=E.RC[Object.keys(locked).length];let att=0;while(rg.size>0){rocks+=cost;att++;if(Math.random()>E.LA[tl]){if(att>2000)break;continue;}const used=new Set();for(const k3 in locked)if(locked[k3])used.add(locked[k3].attr);const pool=E.ATTRS.filter(a=>!used.has(a.id));if(!pool.length)continue;const tot=pool.reduce((s,a)=>s+a.p,0);let rv=Math.random()*tot;let pk=pool[pool.length-1].id;for(const a of pool){rv-=a.p;if(rv<=0){pk=a.id;break;}}let matched=null;for(const gi of rg){if(_pg[gi].attrs.includes(pk)){matched=gi;break;}}if(matched!==null){locked[tl]={attr:pk,tier:rollTier()};rg.delete(matched);break;}if(att>2000)break;}}const goalMap={};const usedG=new Set();for(const tl of[2,1,0]){if(!locked[tl])continue;for(let g=0;g<3;g++){if(usedG.has(g))continue;if(_pg[g].attrs.includes(locked[tl].attr)){goalMap[tl]=g;usedG.add(g);break;}}}const tierFix=[];for(const li in goalMap){const g2=goalMap[li];if(locked[li].tier<_pg[g2].minTier)tierFix.push({minT:_pg[g2].minTier});}let tfRem=tierFix.length;while(tfRem>0){rocks+=E.RC[Math.min(3-tfRem,2)];for(let j=0;j<tfRem;j++){if(rollTier()>=tierFix[j].minT){tierFix.splice(j,1);tfRem--;break;}}if(rocks>5000)break;}sum+=rocks;}QC.set(k,sum/N);return sum/N;}
 
 // Data
 const SK='nikke_ol_optimizer_v4',GN=['Helm','Gloves','Chest','Boots'];
 function ld(){for(const k of[SK,'nikke_ol_optimizer_v3','nikke_ol_optimizer_v2','nikke_ol_optimizer_v1']){try{const r=localStorage.getItem(k);if(r){const d=JSON.parse(r);mg(d);return d;}}catch(e){}}return{characters:[],selectedCharId:null,selectedGearIdx:0,sim:null};}
 function mg(d){for(const c of(d.characters||[]))for(const g of(c.gear||[])){if(g.goals&&g.goals.length>0){if(typeof g.goals[0]==='string')g.goals=g.goals.map(x=>(x&&x!=='none')?{attrs:[x],minTier:1}:{attrs:[],minTier:1});else if(Array.isArray(g.goals[0]))g.goals=g.goals.map(x=>({attrs:x||[],minTier:1}));else if(g.goals[0]&&!g.goals[0].attrs)g.goals=g.goals.map(x=>({attrs:x||[],minTier:1}));}if(g.current&&g.current.length>0&&typeof g.current[0]==='string')g.current=g.current.map(x=>({attr:x||'none',tier:1}));}}
-function sv(d){localStorage.setItem(SK,JSON.stringify(d));}
+function sv(d){try{localStorage.setItem(SK,JSON.stringify(d));}catch(e){if(typeof _diag!=='undefined')_diag.errors.push({t:Date.now(),msg:'Storage error: '+e.message,line:0,col:0,stack:''});}}
 function mkCh(nm){return{id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:nm,gear:GN.map(n=>({name:n,goals:[{attrs:[],minTier:1},{attrs:[],minTier:1},{attrs:[],minTier:1}],current:[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}],ignored:false}))};}
-let D=ld();function save(){sv(D);CC.clear();QC.clear();}
+let D=ld();function save(invKey){sv(D);if(invKey){CC.delete(invKey);QC.delete(invKey);}else{CC.clear();QC.clear();}}
 // UI State
 let selCh=D.selectedCharId,selG=D.selectedGearIdx||0,oDd=null,curTab=0;
 function gCh(){return D.characters.find(c=>c.id===selCh)||null;}
@@ -201,20 +211,37 @@ function switchTab(t){curTab=t;$('tab0').classList.toggle('a',t===0);$('tab1').c
 function render(){rCL();rMain();}
 function rCL(){const el=$('CL');if(!D.characters.length){el.innerHTML='<div style="font-size:.78rem;color:var(--t3);text-align:center;padding:20px">No characters.</div>';return;}
 el.innerHTML=D.characters.map(c=>{const a=c.id===selCh;const ap=c.gear.filter(g=>!g.ignored);const tr=ap.reduce((s,g)=>s+getQC(g.goals,g.current),0);return'<div class="ct'+(a?' a':'')+'" onclick="selChar(\''+c.id+'\')"><div><div class="cn">'+esc(c.name)+'</div><div class="cs">'+ap.length+'pcs · ~'+Math.round(tr)+' rocks</div></div></div>';}).join('');}
-function rMain(){const c=gCh();$('ES').style.display=c?'none':'';$('CD').style.display=c?'':'none';if(!c)return;$('CN').textContent=c.name;rCO(c);rGT(c);rGE(c);rPri(c);rTRef();}
-function rCO(c){const el=$('CO');const ap=c.gear.filter(g=>!g.ignored);let tr=0,dn=0;for(const g of ap){const co=getQC(g.goals,g.current);if(co===0&&g.goals.some(x=>x.attrs.length>0)){const m=E.fullMatch(g.goals.map(x=>(!x||!x.attrs||!x.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:x),g.current);if(m.cnt===3)dn++;}tr+=co;}el.innerHTML='<div class="rg"><div class="ri"><div class="rl">Total Rocks</div><div class="rv cr">'+Math.round(tr)+'</div><div class="rs">'+ap.length+' pieces</div></div><div class="ri"><div class="rl">Days</div><div class="rv cy">'+Math.round(tr/E.RPD)+'</div></div><div class="ri"><div class="rl">Done</div><div class="rv" style="color:var(--ok)">'+dn+'/'+ap.length+'</div></div></div>';}
+function rMain(){const c=gCh();$('ES').style.display=c?'none':'';$('CD').style.display=c?'':'none';if(!c)return;$('CN').textContent=c.name;
+  // Compute costs once for all renderers
+  const costs=c.gear.map(g=>g.ignored?null:getQC(g.goals,g.current));
+  rCO(c,costs);rGT(c);rGE(c);rPri(c,costs);rTRef();}
+function rCO(c,costs){const el=$('CO');const ap=c.gear.map((g,i)=>g.ignored?null:{g,c:costs[i]||0,i}).filter(Boolean);
+  let tr=0,dn=0;for(const p of ap){tr+=p.c;if(p.c===0&&p.g.goals.some(x=>x.attrs.length>0)){const m=E.fullMatch(p.g.goals.map(x=>(!x||!x.attrs||!x.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:x),p.g.current);if(m.cnt===3)dn++;}}
+  el.innerHTML='<div class="rg"><div class="ri"><div class="rl">Total Rocks</div><div class="rv cr">'+Math.round(tr)+'</div><div class="rs">'+ap.length+' pieces</div></div><div class="ri"><div class="rl">Days</div><div class="rv cy">'+Math.round(tr/E.RPD)+'</div></div><div class="ri"><div class="rl">Done</div><div class="rv" style="color:var(--ok)">'+dn+'/'+ap.length+'</div></div></div>';}
 function rGT(c){$('GT').innerHTML=c.gear.map((g,i)=>'<div class="'+(i===selG?'a':'')+(g.ignored?' ign':'')+'" onclick="selGear('+i+')">'+g.name+(g.ignored?' ⊘':'')+'</div>').join('');}
 function rGE(c){if(!c)return;const g=c.gear[selG];$('GN').textContent=g.name;$('IT').classList.toggle('on',g.ignored);$('GE').style.display=g.ignored?'none':'';$('GIG').style.display=g.ignored?'':'none';if(g.ignored)return;
 let gh='';for(let gi=0;gi<3;gi++){const goal=g.goals[gi];const grp=goal.attrs||[];const canA=grp.length<3;const isO=oDd!==null&&oDd.gi===gi;let chips='';grp.forEach((id,ci)=>{if(ci>0)chips+='<span class="gor">or</span>';chips+='<span class="gch">'+E.an(id)+'<span class="gx" onclick="event.stopPropagation();rmGA('+gi+','+ci+')">×</span></span>';});if(!grp.length)chips='<span style="font-size:.74rem;color:var(--t3);font-style:italic">Click +</span>';let dd='';if(isO){dd='<div class="gdd">';for(const a of E.ATTRS){const inG=grp.includes(a.id);dd+='<div class="gdi'+(inG?' dis':'')+'" onclick="event.stopPropagation();'+(inG?'':"addGA("+gi+",'"+a.id+"')")+'"><span>'+a.nm+'</span><span class="pct">'+Math.round(a.p*100)+'%</span></div>';}dd+='</div>';}gh+='<div class="gr"><div class="grl">Goal '+(gi+1)+'</div><div class="gc">'+chips+' <select class="tier-sel" onchange="setGoalTier('+gi+',+this.value)" title="Min tier">';for(let t=1;t<=15;t++)gh+='<option value="'+t+'" '+(goal.minTier===t?'selected':'')+'>≥T'+t+'</option>';gh+='</select></div><div class="gdw"><button class="gab" '+(canA?'':'disabled')+' onclick="event.stopPropagation();togDd('+gi+')">+</button>'+dd+'</div></div>';}$('GO').innerHTML=gh;
 const inf=$('GI');const he=!g.goals.some(x=>x.attrs.length);if(he){inf.innerHTML='Set 1–3 goals. Leave unused goals empty. Click <b>+</b> to add OR-alternatives within a goal.';inf.style.borderColor='';inf.style.background='';}else{const ac=g.goals.filter(x=>x.attrs.length).length;inf.innerHTML='✓ '+ac+' goal'+(ac>1?'s':'')+' set.'+(ac<3?' Empty goals are auto-satisfied.':'');inf.style.borderColor='rgba(52,211,153,.3)';inf.style.background='rgba(52,211,153,.05)';}
-const am=E.optMatch(g.goals,g.current);const fm=E.fullMatch(g.goals,g.current);let ch='';for(let i=0;i<3;i++){const lp=Math.round(E.LA[i]*100);const cl=g.current[i];const isAM=am.mL.has(i);const isFM=fm.mL.has(i);ch+='<div class="cln"><div class="ll">L'+(i+1)+' <span style="color:var(--t3);font-size:.6rem">'+lp+'%</span></div><select onchange="setCurA('+i+',this.value)"><option value="none">— Empty —</option>';for(const a of E.ATTRS)ch+='<option value="'+a.id+'" '+(cl.attr===a.id?'selected':'')+'>'+a.nm+'</option>';ch+='</select><select class="tier-sel" onchange="setCurT('+i+',+this.value)">';for(let t=1;t<=15;t++)ch+='<option value="'+t+'" '+(cl.tier===t?'selected':'')+'>T'+t+'</option>';ch+='</select><span class="md0 '+(isFM?'y':(isAM?'y':'n'))+'" style="'+(isAM&&!isFM?'background:var(--warn)':'')+'"></span></div>';if(cl.attr!=='none'&&TV[cl.attr]){const gi2=am.as.get(i);const needT=gi2!==undefined?g.goals[gi2].minTier:1;ch+='<div style="font-size:.68rem;color:var(--t3);margin:-2px 0 4px 78px">'+TV[cl.attr][cl.tier-1]+'%'+(gi2!==undefined?' · need ≥T'+needT+(cl.tier>=needT?' <span style="color:var(--ok)">✓</span>':' <span style="color:var(--warn)">↑</span>'):'')+'</div>';}}$('CG').innerHTML=ch;rPR(g);}
-function rPR(g){const el=$('PR');if(!g.goals.some(x=>x.attrs.length)){el.innerHTML='<div style="font-size:.8rem;color:var(--t3);text-align:center;padding:20px">Set at least 1 goal to see calculations.</div>';return;}const r=getCR(g.goals,g.current);if(!r){el.innerHTML='';return;}if(r.status==='complete'){el.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:1.5rem;margin-bottom:8px">✅</div><div style="font-size:.9rem;color:var(--ok);font-weight:600">Complete!</div></div>';return;}const cf=r.confidence;const mx=Math.max(cf.p50,cf.p75,cf.p90,1);let sb='';if(r.status==='reset'){sb='<div class="sb sr"><div class="sbt">⟳ Full Reset Recommended</div>Starting fresh is cheaper.';const std=r.comparison.find(c=>c.name.startsWith('Lock all'));if(std)sb+='<div class="sbs">Saves ~'+(std.mean-r.comparison[0].mean)+' rocks.</div>';sb+='</div>';}else if(r.status==='deviate'){sb='<div class="sb sd"><div class="sbt">↗ Deviation</div>'+r.bestStrategy.name+'</div>';}else{sb='<div class="sb ss"><div class="sbt">✓ Standard</div>Lock matched, roll remaining, optimize tiers.</div>';}let gu='';if(r.guide&&r.guide.length){gu='<div class="sec" style="margin-top:16px">Guide</div><ol class="stl">';for(const s of r.guide)gu+='<li>'+s+'</li>';gu+='</ol>';}let cm='';if(r.comparison&&r.comparison.length>1){cm='<div class="scc"><table><tr><th>Strategy</th><th>Attrs</th><th>Tiers</th><th>Total</th></tr>';for(const s of r.comparison)cm+='<tr><td'+(s.isBest?' class="bst"':'')+'>'+s.name+(s.isBest?' ★':'')+'</td><td>~'+s.meanP1+'</td><td>~'+s.meanP2+'</td><td'+(s.isBest?' class="bst"':'')+'>~'+s.mean+'</td></tr>';cm+='</table></div>';}const p1R=Math.round(r.p1Rocks),p2R=Math.round(r.p2Rocks),totR=Math.round(r.totalRocks),p1P=totR>0?Math.round(p1R/totR*100):0,p2P=totR>0?Math.round(p2R/totR*100):0;let pb='<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div class="ri" style="border-color:rgba(74,124,255,.3)"><div class="rl">Attr Lines</div><div class="rv cr">'+p1R+'</div><div class="rs">'+p1P+'% · ~'+Math.round(p1R/1.5)+'d</div></div><div class="ri" style="border-color:rgba(167,139,250,.3)"><div class="rl">Tier Reroll</div><div class="rv" style="color:var(--purp)">'+p2R+'</div><div class="rs">'+p2P+'% · ~'+Math.round(p2R/1.5)+'d</div></div><div class="ri" style="border-color:rgba(52,211,153,.3)"><div class="rl">Total</div><div class="rv" style="color:var(--ok)">'+totR+'</div><div class="rs">~'+Math.round(r.totalDays)+'d</div></div></div>';const cd=[['50',cf.p50,'--ok','c5'],['75',cf.p75,'--purp','c7'],['90',cf.p90,'--err','c9']];let cbb='';for(const[l,v,cs,cl] of cd)cbb+='<div class="cbr"><div class="cbl '+cl+'">'+l+'%</div><div class="cbt"><div class="cbf" style="width:'+(v/mx*100)+'%;background:var('+cs+')"></div></div><div class="cbv '+cl+'">'+v+'</div></div>';el.innerHTML=sb+'<div class="sec">Expected Cost</div>'+pb+gu+cm+'<div class="sec" style="margin-top:16px">Confidence</div><div class="cb">'+cbb+'</div><div style="font-size:.68rem;color:var(--t3);margin-top:4px">50%≈'+Math.round(cf.p50/1.5)+'d · 75%≈'+Math.round(cf.p75/1.5)+'d · 90%≈'+Math.round(cf.p90/1.5)+'d</div>';}
-function rPri(c){const el=$('PT');const pcs=c.gear.map((g,i)=>{if(g.ignored)return null;const hg=g.goals.some(x=>x.attrs.length>0);if(!hg)return{nm:g.name,i,r:0,d:0,done:false,ng:true};const co=getQC(g.goals,g.current);const m=E.fullMatch(g.goals.map(x=>(!x||!x.attrs||!x.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:x),g.current);if(m.cnt===3)return{nm:g.name,i,r:0,d:0,done:true};return{nm:g.name,i,r:co,d:co/E.RPD,done:false};}).filter(Boolean).sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;if(a.ng!==b.ng)return a.ng?1:-1;return a.r-b.r;});if(!pcs.length){el.innerHTML='';return;}const bgs=['p1','p2','p3','p4'];let rw='';pcs.forEach((p,i)=>{const st=p.done?'<span style="color:var(--ok)">✓</span>':p.ng?'<span style="color:var(--t3)">—</span>':'';rw+='<tr style="cursor:pointer" onclick="selGear('+p.i+')"><td><span class="pb '+bgs[Math.min(i,3)]+'">#'+(i+1)+'</span></td><td style="font-weight:600">'+p.nm+'</td><td class="cr">'+(p.done||p.ng?'—':Math.round(p.r))+'</td><td>'+st+'</td></tr>';});el.innerHTML='<table class="st"><thead><tr><th>#</th><th>Piece</th><th>Rocks</th><th></th></tr></thead><tbody>'+rw+'</tbody></table>';}
-function rTRef(){const el=$('TRT');const aids=['element','hit_rate','ammo','atk','charge_dmg','charge_spd','crit_rate','crit_dmg','def'];const nms=['Elem','Hit','Ammo','ATK','ChDMG','ChSPD','CritR','CritD','DEF'];let h='<table class="trt"><thead><tr><th>T</th><th>Rate</th>';for(const n of nms)h+='<th>'+n+'</th>';h+='</tr></thead><tbody>';const br=['60%','','','','35%','','','','','','5%','','','',''];const bs=[4,0,0,0,6,0,0,0,0,0,5,0,0,0,0];for(let t=1;t<=15;t++){h+='<tr class="'+tbc(t)+'"><td style="font-weight:700">'+t+'</td>';if(bs[t-1]>0)h+='<td rowspan="'+bs[t-1]+'">'+br[t-1]+'</td>';for(const a of aids)h+='<td>'+TV[a][t-1]+'%</td>';h+='</tr>';}h+='</tbody></table>';el.innerHTML=h;}
+const _pg=g.goals.map(x=>(!x||!x.attrs||!x.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:x);
+const am=E.optMatch(_pg,g.current);const fm=E.fullMatch(_pg,g.current);let ch='';for(let i=0;i<3;i++){const lp=Math.round(E.LA[i]*100);const cl=g.current[i];const isAM=am.mL.has(i);const isFM=fm.mL.has(i);ch+='<div class="cln"><div class="ll">L'+(i+1)+' <span style="color:var(--t3);font-size:.6rem">'+lp+'%</span></div><select onchange="setCurA('+i+',this.value)"><option value="none">— Empty —</option>';for(const a of E.ATTRS)ch+='<option value="'+a.id+'" '+(cl.attr===a.id?'selected':'')+'>'+a.nm+'</option>';ch+='</select><select class="tier-sel" onchange="setCurT('+i+',+this.value)">';for(let t=1;t<=15;t++)ch+='<option value="'+t+'" '+(cl.tier===t?'selected':'')+'>T'+t+'</option>';ch+='</select><span class="md0 '+(isFM?'y':(isAM?'y':'n'))+'" style="'+(isAM&&!isFM?'background:var(--warn)':'')+'"></span></div>';if(cl.attr!=='none'&&TV[cl.attr]){const gi2=am.as.get(i);const needT=gi2!==undefined?g.goals[gi2].minTier:1;ch+='<div style="font-size:.68rem;color:var(--t3);margin:-2px 0 4px 78px">'+TV[cl.attr][cl.tier-1]+'%'+(gi2!==undefined?' · need ≥T'+needT+(cl.tier>=needT?' <span style="color:var(--ok)">✓</span>':' <span style="color:var(--warn)">↑</span>'):'')+'</div>';}}$('CG').innerHTML=ch;rPR(g);}
+function rPR(g){const el=$('PR');if(!g.goals.some(x=>x.attrs.length)){el.innerHTML='<div style="font-size:.8rem;color:var(--t3);text-align:center;padding:20px">Set at least 1 goal to see calculations.</div>';return;}const r=getCR(g.goals,g.current);if(!r){el.innerHTML='';return;}if(r.status==='impossible'){el.innerHTML='<div class="sb sr"><div class="sbt">⚠ Impossible Goal Configuration</div>These goals require duplicate attributes on a single piece, which the game does not allow. Adjust your goals so each can be satisfied by a different attribute.</div>';return;}if(r.status==='complete'){el.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:1.5rem;margin-bottom:8px">✅</div><div style="font-size:.9rem;color:var(--ok);font-weight:600">Complete!</div></div>';return;}const cf=r.confidence;const mx=Math.max(cf.p50,cf.p75,cf.p90,1);let sb='';if(r.status==='reset'){sb='<div class="sb sr"><div class="sbt">⟳ Full Reset Recommended</div>Starting fresh is cheaper.';const std=r.comparison.find(c=>c.name.startsWith('Lock all'));if(std)sb+='<div class="sbs">Saves ~'+(std.mean-r.comparison[0].mean)+' rocks.</div>';sb+='</div>';}else if(r.status==='deviate'){sb='<div class="sb sd"><div class="sbt">↗ Deviation</div>'+r.bestStrategy.name+'</div>';}else{sb='<div class="sb ss"><div class="sbt">✓ Standard</div>Lock matched, roll remaining, optimize tiers.</div>';}let gu='';if(r.guide&&r.guide.length){gu='<div class="sec" style="margin-top:16px">Guide</div><ol class="stl">';for(const s of r.guide)gu+='<li>'+s+'</li>';gu+='</ol>';}let cm='';if(r.comparison&&r.comparison.length>1){cm='<div class="scc"><table><tr><th>Strategy</th><th>Attrs</th><th>Tiers</th><th>Total</th></tr>';for(const s of r.comparison)cm+='<tr><td'+(s.isBest?' class="bst"':'')+'>'+s.name+(s.isBest?' ★':'')+'</td><td>~'+s.meanP1+'</td><td>~'+s.meanP2+'</td><td'+(s.isBest?' class="bst"':'')+'>~'+s.mean+'</td></tr>';cm+='</table></div>';}const p1R=Math.round(r.p1Rocks),p2R=Math.round(r.p2Rocks),totR=Math.round(r.totalRocks),p1P=totR>0?Math.round(p1R/totR*100):0,p2P=totR>0?Math.round(p2R/totR*100):0;let pb='<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div class="ri" style="border-color:rgba(74,124,255,.3)"><div class="rl">Attr Lines</div><div class="rv cr">'+p1R+'</div><div class="rs">'+p1P+'% · ~'+Math.round(p1R/1.5)+'d</div></div><div class="ri" style="border-color:rgba(167,139,250,.3)"><div class="rl">Tier Reroll</div><div class="rv" style="color:var(--purp)">'+p2R+'</div><div class="rs">'+p2P+'% · ~'+Math.round(p2R/1.5)+'d</div></div><div class="ri" style="border-color:rgba(52,211,153,.3)"><div class="rl">Total</div><div class="rv" style="color:var(--ok)">'+totR+'</div><div class="rs">~'+Math.round(r.totalDays)+'d</div></div></div>';const cd=[['50',cf.p50,'--ok','c5'],['75',cf.p75,'--purp','c7'],['90',cf.p90,'--err','c9']];let cbb='';for(const[l,v,cs,cl] of cd)cbb+='<div class="cbr"><div class="cbl '+cl+'">'+l+'%</div><div class="cbt"><div class="cbf" style="width:'+(v/mx*100)+'%;background:var('+cs+')"></div></div><div class="cbv '+cl+'">'+v+'</div></div>';el.innerHTML=sb+'<div class="sec">Expected Cost</div>'+pb+gu+cm+'<div class="sec" style="margin-top:16px">Confidence</div><div class="cb">'+cbb+'</div><div style="font-size:.68rem;color:var(--t3);margin-top:4px">50%≈'+Math.round(cf.p50/1.5)+'d · 75%≈'+Math.round(cf.p75/1.5)+'d · 90%≈'+Math.round(cf.p90/1.5)+'d</div>';}
+function rPri(c,costs){const el=$('PT');const pcs=c.gear.map((g,i)=>{if(g.ignored)return null;const hg=g.goals.some(x=>x.attrs.length>0);if(!hg)return{nm:g.name,i,r:0,d:0,done:false,ng:true};const co=costs[i]||0;const m=E.fullMatch(g.goals.map(x=>(!x||!x.attrs||!x.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:x),g.current);if(m.cnt===3)return{nm:g.name,i,r:0,d:0,done:true};return{nm:g.name,i,r:co,d:co/E.RPD,done:false};}).filter(Boolean).sort((a,b)=>{if(a.done!==b.done)return a.done?1:-1;if(a.ng!==b.ng)return a.ng?1:-1;return a.r-b.r;});if(!pcs.length){el.innerHTML='';return;}const bgs=['p1','p2','p3','p4'];let rw='';pcs.forEach((p,i)=>{const st=p.done?'<span style="color:var(--ok)">✓</span>':p.ng?'<span style="color:var(--t3)">—</span>':'';rw+='<tr style="cursor:pointer" onclick="selGear('+p.i+')"><td><span class="pb '+bgs[Math.min(i,3)]+'">#'+(i+1)+'</span></td><td style="font-weight:600">'+p.nm+'</td><td class="cr">'+(p.done||p.ng?'—':Math.round(p.r))+'</td><td>'+st+'</td></tr>';});el.innerHTML='<table class="st"><thead><tr><th>#</th><th>Piece</th><th>Rocks</th><th></th></tr></thead><tbody>'+rw+'</tbody></table>';}
+let _tRefBuilt=false;
+function rTRef(){if(_tRefBuilt)return;_tRefBuilt=true;const el=$('TRT');const aids=['element','hit_rate','ammo','atk','charge_dmg','charge_spd','crit_rate','crit_dmg','def'];const nms=['Elem','Hit','Ammo','ATK','ChDMG','ChSPD','CritR','CritD','DEF'];let h='<table class="trt"><thead><tr><th>T</th><th>Rate</th>';for(const n of nms)h+='<th>'+n+'</th>';h+='</tr></thead><tbody>';const br=['60%','','','','35%','','','','','','5%','','','',''];const bs=[4,0,0,0,6,0,0,0,0,0,5,0,0,0,0];for(let t=1;t<=15;t++){h+='<tr class="'+tbc(t)+'"><td style="font-weight:700">'+t+'</td>';if(bs[t-1]>0)h+='<td rowspan="'+bs[t-1]+'">'+br[t-1]+'</td>';for(const a of aids)h+='<td>'+TV[a][t-1]+'%</td>';h+='</tr>';}h+='</tbody></table>';el.innerHTML=h;}
 
 // ===== SIMULATOR =====
 let sim={goals:[{attrs:[],minTier:1},{attrs:[],minTier:1},{attrs:[],minTier:1}],lines:[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}],locks:[false,false,false],clocks:[false,false,false],rocks:0,customLocks:0,history:[],pending:null,mode:'auto',manualInput:[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}]};
-if(D.sim)sim={...sim,...D.sim};
+if(D.sim){try{sim={...sim,...D.sim};
+  if(!Array.isArray(sim.goals)||sim.goals.length!==3)sim.goals=[{attrs:[],minTier:1},{attrs:[],minTier:1},{attrs:[],minTier:1}];
+  for(let i=0;i<3;i++){if(!sim.goals[i]||!Array.isArray(sim.goals[i].attrs))sim.goals[i]={attrs:[],minTier:1};if(typeof sim.goals[i].minTier!=='number')sim.goals[i].minTier=1;}
+  if(!Array.isArray(sim.lines)||sim.lines.length!==3)sim.lines=[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}];
+  for(let i=0;i<3;i++){if(!sim.lines[i]||typeof sim.lines[i].attr!=='string')sim.lines[i]={attr:'none',tier:1};}
+  if(!Array.isArray(sim.locks)||sim.locks.length!==3)sim.locks=[false,false,false];
+  if(!Array.isArray(sim.clocks)||sim.clocks.length!==3)sim.clocks=[false,false,false];
+  if(!Array.isArray(sim.manualInput)||sim.manualInput.length!==3)sim.manualInput=[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}];
+  if(!Array.isArray(sim.history))sim.history=[];
+  if(typeof sim.rocks!=='number')sim.rocks=0;if(typeof sim.customLocks!=='number')sim.customLocks=0;
+}catch(e){sim={goals:[{attrs:[],minTier:1},{attrs:[],minTier:1},{attrs:[],minTier:1}],lines:[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}],locks:[false,false,false],clocks:[false,false,false],rocks:0,customLocks:0,history:[],pending:null,mode:'auto',manualInput:[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}]};}}
 
 function saveSim(){D.sim=sim;sv(D);}
 
@@ -241,9 +268,13 @@ function rSim(){
   // Lines + Locks
   const sl=$('SL');let lh='';
   const nLocked=sim.locks.reduce((s,v,i)=>(v||sim.clocks[i])?s+1:s,0);
+  // Compute matches ONCE outside the loop, with null-safe padded goals
+  const _sg=sim.goals.map(g=>(!g||!g.attrs||!g.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:g);
+  const _hasGoals=sim.goals.some(g=>g&&g.attrs&&g.attrs.length>0);
+  const _sfm=_hasGoals?E.fullMatch(_sg,sim.lines):{mL:new Set(),mG:new Set(),as:new Map(),cnt:0};
+  const _sam=_hasGoals?E.optMatch(_sg,sim.lines):{mL:new Set(),mG:new Set(),as:new Map(),cnt:0};
   for(let i=0;i<3;i++){const ln=sim.lines[i];const locked=sim.locks[i];const cl=sim.clocks[i];
-    const fm=E.fullMatch(sim.goals,[sim.lines[0],sim.lines[1],sim.lines[2]]);const isDone=fm.mL.has(i);
-    const am=E.optMatch(sim.goals.map(g=>(!g||!g.attrs||!g.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:g),[sim.lines[0],sim.lines[1],sim.lines[2]]);const isAM=am.mL.has(i);
+    const isDone=_sfm.mL.has(i);const isAM=_sam.mL.has(i);
     lh+='<div class="sim-line'+(locked?' locked':'')+(isDone?' done':'')+'">';
     lh+='<div class="ll">L'+(i+1)+'</div>';
     lh+='<div style="font-weight:600;font-size:.85rem">'+(ln.attr!=='none'?E.an(ln.attr):'<span style="color:var(--t3)">Empty</span>')+'</div>';
@@ -325,25 +356,46 @@ function rSim(){
     sp.innerHTML=ph;
   }else{sp.innerHTML='';}
 
-  // Advisor
+  // Advisor — lazy loaded to prevent UI freeze (especially on mobile)
   const sv2=$('SV');
   if(!sim.pending&&sim.goals.some(g=>g.attrs.length>0)){
     const fm=E.fullMatch(sim.goals.map(g=>(!g||!g.attrs||!g.attrs.length)?{attrs:E.ATTRS.map(a=>a.id),minTier:1}:g),sim.lines);
     if(fm.cnt===3){sv2.innerHTML='<div class="sim-advisor"><div class="sa-title">✅ All goals achieved!</div>Total spent: '+sim.rocks+' rocks, '+sim.customLocks+' custom locks.</div>';}
     else{
-      // Quick MC for expected remaining cost
-      const r=getCR(sim.goals,sim.lines);
-      if(r){sv2.innerHTML='<div class="sim-advisor"><div class="sa-title">Strategy Advisor</div>Expected remaining: ~<b>'+Math.round(r.totalRocks)+'</b> rocks ('+Math.round(r.p1Rocks)+' attr + '+Math.round(r.p2Rocks)+' tier).<br>'+
-        (r.status==='reset'?'<span style="color:var(--err)">Recommend: Full reset (cheaper than current path).</span>':
-         r.status==='deviate'?'<span style="color:var(--warn)">Recommend: '+r.bestStrategy.name+'</span>':
-         '<span style="color:var(--ok)">Recommend: Lock matched lines, roll for remaining.</span>')+'</div>';}
-      else{sv2.innerHTML='';}
+      const ck2=JSON.stringify([sim.goals,sim.lines]);
+      if(CC.has(ck2)){
+        const r=CC.get(ck2);
+        if(r&&r.status==='impossible')sv2.innerHTML='<div class="sim-advisor" style="border-color:rgba(248,113,113,.25);background:rgba(248,113,113,.04)"><div class="sa-title" style="color:var(--err)">⚠ Impossible Goals</div>These goals cannot be satisfied simultaneously — duplicate attributes needed.</div>';
+        else if(r)sv2.innerHTML=buildAdvisorHtml(r);else sv2.innerHTML='';
+      }else{
+        sv2.innerHTML='<div class="sim-advisor"><div class="sa-title">Strategy Advisor</div><button class="b bs bp" onclick="simCalcAdvisor()">Calculate recommendation</button></div>';
+      }
     }
   }else{sv2.innerHTML='';}
 
   // History
   const sh=$('SH');
-  sh.innerHTML=sim.history.slice().reverse().map((h,i)=>'<div class="sim-hist-row"><span>#'+(sim.history.length-i)+' '+h.action+'</span><span>'+h.cost+' rock'+(h.cost!==1?'s':'')+'</span></div>').join('');
+  sh.innerHTML=sim.history.slice().reverse().map((h,i)=>'<div class="sim-hist-row"><span>#'+(sim.history.length-i)+' '+h.action+'</span><span>'+h.cost+' rock'+(h.cost!==1?'s':'')+(h.ms?' <span style="color:var(--t3);font-size:.6rem">('+h.ms+'ms)</span>':'')+'</span></div>').join('');
+}
+
+function buildAdvisorHtml(r){
+  return '<div class="sim-advisor"><div class="sa-title">Strategy Advisor</div>Expected remaining: ~<b>'+Math.round(r.totalRocks)+'</b> rocks ('+Math.round(r.p1Rocks)+' attr + '+Math.round(r.p2Rocks)+' tier).<br>'+
+    (r.status==='reset'?'<span style="color:var(--err)">Recommend: Full reset (cheaper than current path).</span>':
+     r.status==='deviate'?'<span style="color:var(--warn)">Recommend: '+r.bestStrategy.name+'</span>':
+     '<span style="color:var(--ok)">Recommend: Lock matched lines, roll for remaining.</span>')+'</div>';
+}
+
+function simCalcAdvisor(){
+  const sv2=$('SV');
+  sv2.innerHTML='<div class="sim-advisor"><div class="sa-title">Calculating...</div></div>';
+  // Use setTimeout to let the UI update before heavy computation
+  setTimeout(()=>{
+    const t0=performance.now();
+    const r=getCR(sim.goals,sim.lines);
+    const ms=Math.round(performance.now()-t0);
+    if(r)sv2.innerHTML=buildAdvisorHtml(r)+'<div style="font-size:.6rem;color:var(--t3);margin-top:4px">Computed in '+ms+'ms</div>';
+    else sv2.innerHTML='';
+  },50);
 }
 
 function simDoRoll(type){
@@ -364,6 +416,7 @@ function simDoRoll(type){
       const result=[];
       for(let i=0;i<3;i++){
         if((sim.locks[i]||sim.clocks[i])){result.push(sim.lines[i].tier);continue;}
+        if(sim.lines[i].attr==='none'){result.push(sim.lines[i].tier);continue;}
         result.push(sim.manualInput[i].tier);
       }
       sim.pending={type:'reset',result,cost};
@@ -379,7 +432,9 @@ function simDoRoll(type){
       sim.pending={type:'change',result,cost};
     }else{
       const result=[];
-      for(let i=0;i<3;i++){if((sim.locks[i]||sim.clocks[i]))result.push(sim.lines[i].tier);else result.push(rollTier());}
+      for(let i=0;i<3;i++){if((sim.locks[i]||sim.clocks[i])){result.push(sim.lines[i].tier);continue;}
+        if(sim.lines[i].attr==='none'){result.push(sim.lines[i].tier);continue;}
+        result.push(rollTier());}
       sim.pending={type:'reset',result,cost};
     }
   }
@@ -387,20 +442,25 @@ function simDoRoll(type){
 }
 
 function simAccept(){
+  const t0=performance.now();
   const p=sim.pending;if(!p)return;
   sim.rocks+=p.cost;
-  // Clear one-time custom locks (they were consumed)
+  const wasProtected=[sim.locks[0]||sim.clocks[0],sim.locks[1]||sim.clocks[1],sim.locks[2]||sim.clocks[2]];
   let clUsed=0;
   for(let i=0;i<3;i++){if(sim.clocks[i]){sim.clocks[i]=false;clUsed++;}}
   sim.customLocks+=clUsed*100;
 
   if(p.type==='change'){
-    for(let i=0;i<3;i++){if(p.result[i])sim.lines[i]={attr:p.result[i].attr,tier:p.result[i].tier};else if(!sim.locks[i])sim.lines[i]={attr:'none',tier:1};}
+    for(let i=0;i<3;i++){if(p.result[i])sim.lines[i]={attr:p.result[i].attr,tier:p.result[i].tier};else if(!wasProtected[i])sim.lines[i]={attr:'none',tier:1};}
   }else{
-    for(let i=0;i<3;i++){if(!((sim.locks[i]||sim.clocks[i]))){sim.lines[i]={attr:sim.lines[i].attr,tier:p.result[i]};}}
+    for(let i=0;i<3;i++){if(!wasProtected[i]){sim.lines[i]={attr:sim.lines[i].attr,tier:p.result[i]};}}
   }
-  sim.history.push({action:p.type==='change'?'Change Effects':'Reset %',cost:p.cost});
-  sim.pending=null;CC.clear();QC.clear();saveSim();rSim();
+  const ms=Math.round(performance.now()-t0);
+  sim.history.push({action:p.type==='change'?'Change Effects':'Reset %',cost:p.cost,ms});
+  sim.pending=null;
+  // Only clear sim-related cache (not planner cache)
+  CC.delete(JSON.stringify([sim.goals,sim.lines]));
+  saveSim();rSim();
 }
 
 function simReject(){
@@ -432,14 +492,87 @@ function renCh(){const n=$('RI').value.trim();if(!n)return;const c=gCh();if(c){c
 function resetChar(){const c=gCh();if(!c||!confirm('Reset '+c.name+'?'))return;for(const g of c.gear){g.goals=[{attrs:[],minTier:1},{attrs:[],minTier:1},{attrs:[],minTier:1}];g.current=[{attr:'none',tier:1},{attr:'none',tier:1},{attr:'none',tier:1}];g.ignored=false;}save();render();}
 function togIgn(){const c=gCh();if(!c)return;c.gear[selG].ignored=!c.gear[selG].ignored;save();render();}
 function togDd(gi){if(oDd&&oDd.gi===gi)oDd=null;else oDd={gi};rGE(gCh());}
-function addGA(gi,id){const c=gCh();if(!c)return;const g=c.gear[selG].goals[gi];if(g.attrs.length>=3||g.attrs.includes(id))return;g.attrs.push(id);oDd=null;save();render();}
-function rmGA(gi,ci){const c=gCh();if(!c)return;c.gear[selG].goals[gi].attrs.splice(ci,1);save();render();}
-function setGoalTier(gi,t){const c=gCh();if(!c)return;c.gear[selG].goals[gi].minTier=t;save();render();}
-function setCurA(li,v){const c=gCh();if(!c)return;c.gear[selG].current[li].attr=v;save();render();}
-function setCurT(li,t){const c=gCh();if(!c)return;c.gear[selG].current[li].tier=t;save();render();}
+function addGA(gi,id){const c=gCh();if(!c)return;const g=c.gear[selG].goals[gi];if(g.attrs.length>=3||g.attrs.includes(id))return;g.attrs.push(id);oDd=null;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
+function rmGA(gi,ci){const c=gCh();if(!c)return;c.gear[selG].goals[gi].attrs.splice(ci,1);save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
+function setGoalTier(gi,t){const c=gCh();if(!c)return;c.gear[selG].goals[gi].minTier=t;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
+function setCurA(li,v){const c=gCh();if(!c)return;c.gear[selG].current[li].attr=v;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
+function setCurT(li,t){const c=gCh();if(!c)return;c.gear[selG].current[li].tier=t;save(ck(c.gear[selG].goals,c.gear[selG].current));render();}
 
 function exportData(){const b=new Blob([JSON.stringify(D,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='nikke-ol-data.json';a.click();URL.revokeObjectURL(u);}
-function importData(){const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.characters){mg(d);D=d;selCh=d.selectedCharId||(d.characters[0]?.id||null);selG=d.selectedGearIdx||0;save();render();}}catch(e){alert('Import failed');}};r.readAsText(f);};i.click();}
+function importData(){const i=document.createElement('input');i.type='file';i.accept='.json';i.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.characters&&Array.isArray(d.characters)){mg(d);D=d;selCh=d.selectedCharId||(d.characters[0]?.id||null);selG=d.selectedGearIdx||0;save();render();}else{alert('Invalid file: missing characters array');}}catch(e){alert('Import failed: '+e.message);}};r.readAsText(f);};i.click();}
+
+// ===== DIAGNOSTICS =====
+const _diag={errors:[],warns:[],startTime:Date.now()};
+window.onerror=function(msg,src,line,col,err){
+  _diag.errors.push({t:Date.now(),msg:msg+'',line,col,stack:err?.stack||''});
+  const dp=document.getElementById('diagLog');
+  if(dp)dp.innerHTML=_diag.errors.map(e=>'<div style="color:var(--err);font-size:.68rem;margin:2px 0">'+new Date(e.t).toLocaleTimeString()+' L'+e.line+': '+e.msg+'</div>').join('');
+  return false;
+};
+window.addEventListener('unhandledrejection',e=>{
+  _diag.errors.push({t:Date.now(),msg:'Promise: '+(e.reason?.message||e.reason+''),line:0,col:0,stack:e.reason?.stack||''});
+});
+
+function getDiagInfo(){
+  const ua=navigator.userAgent;
+  const mem=navigator.deviceMemory?navigator.deviceMemory+'GB':'unknown';
+  const cores=navigator.hardwareConcurrency||'unknown';
+  const scr=screen.width+'x'+screen.height+' @'+window.devicePixelRatio+'x';
+  const vp=window.innerWidth+'x'+window.innerHeight;
+  const chars=D.characters.length;
+  const cacheSize=CC.size+'/'+QC.size;
+  const uptime=Math.round((Date.now()-_diag.startTime)/1000)+'s';
+  const errors=_diag.errors.length;
+  const ls=JSON.stringify(D).length;
+
+  return [
+    'Nikke OL Optimizer — Bug Report',
+    '================================',
+    'Time: '+new Date().toISOString(),
+    'Uptime: '+uptime,
+    'UA: '+ua,
+    'Screen: '+scr+' | Viewport: '+vp,
+    'Memory: '+mem+' | Cores: '+cores,
+    'Characters: '+chars+' | Cache: '+cacheSize,
+    'localStorage: '+Math.round(ls/1024)+'KB',
+    'Errors: '+errors,
+    ..._diag.errors.map(e=>'  ['+new Date(e.t).toLocaleTimeString()+'] L'+e.line+': '+e.msg),
+    '',
+    'Sim state: rocks='+sim.rocks+' rolls='+sim.history.length+' pending='+(sim.pending?'yes':'no'),
+    'Tab: '+(curTab===0?'Planner':'Simulator'),
+    '',
+    'Steps to reproduce:',
+    '1. ',
+    '2. ',
+    '3. ',
+  ].join('\n');
+}
+
+function copyDiag(){
+  const info=getDiagInfo();
+  navigator.clipboard.writeText(info).then(()=>{
+    const btn=document.getElementById('diagCopy');
+    if(btn){btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='📋 Copy Diagnostics';},1500);}
+  }).catch(()=>{
+    // Fallback
+    const ta=document.createElement('textarea');ta.value=info;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+  });
+}
 
 render();
-</script></body></html>
+</script>
+<div style="max-width:1200px;margin:40px auto 0;padding:0 24px 24px;">
+<details style="border:1px solid var(--bdr);border-radius:8px;padding:12px 16px;background:var(--bg2);font-size:.72rem;color:var(--t3);">
+<summary style="cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:.8rem;color:var(--t3);">🔧 Diagnostics (for bug reports)</summary>
+<div style="margin-top:8px;">
+<div id="diagLog" style="margin-bottom:8px;max-height:100px;overflow-y:auto;"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;">
+<button id="diagCopy" onclick="copyDiag()" style="font-family:'Exo 2',sans-serif;font-size:.72rem;padding:4px 10px;border:1px solid var(--bdr);border-radius:4px;background:var(--bg2);color:var(--t2);cursor:pointer;">📋 Copy Diagnostics</button>
+<button onclick="CC.clear();QC.clear();alert('Cache cleared')" style="font-family:'Exo 2',sans-serif;font-size:.72rem;padding:4px 10px;border:1px solid var(--bdr);border-radius:4px;background:var(--bg2);color:var(--t2);cursor:pointer;">🗑 Clear Cache</button>
+<span id="diagStats" style="padding-top:4px;"></span>
+</div>
+<div style="margin-top:6px;color:var(--t3);font-size:.65rem;">Click "Copy Diagnostics" and paste into your bug report. Includes device info, error log, and session state.</div>
+</div>
+</details>
+</div>
+</body></html>
